@@ -1,9 +1,8 @@
 export default {
 	id: 'operation-translator-node',
-	handler: async ({ input_to_translate, language }, { database, accountability }) => {
-		// Fetch the user's language if "auto" is selected
-		let userLanguage = 'en-US'; // Default language fallback
+	handler: async ({ input_to_translate, language }, { database, logger, accountability }) => {
 
+		let userLanguage = undefined;
 		if (language === 'auto' && accountability?.user) {
 			try {
 				// Retrieve user data from the database
@@ -19,11 +18,33 @@ export default {
 					throw new Error('User language not found in user data.');
 				}
 			} catch (error) {
-				throw new Error(`Failed to retrieve user language: ${error.message}`);
+				// Log the error and fallback to the project's default language
+				logger.error(`Failed to retrieve user language: ${error.message}`);
 			}
 		} else {
 			// Use the language provided in the operation options
-			userLanguage = language || 'en-US';
+			userLanguage = language;
+		}
+		
+		if (userLanguage === undefined) {
+			// Fetch the project's language if "auto" is selected
+			let projectLanguage; // Default language fallback
+			try {
+				const settings = await database
+					.select('default_language')
+					.from('directus_settings')
+					.first();
+
+				if (settings?.default_language) {
+					projectLanguage = settings.default_language;
+				} else {
+					throw new Error("Language not found in project settings.");
+				}
+			} catch (error) {
+				projectLanguage = 'en-US';
+			}
+
+			userLanguage = projectLanguage;
 		}
 
 		// Fetch translations from the Directus database
@@ -34,9 +55,9 @@ export default {
 
 		// Create a translation map for quick lookup
 		const translationMap = {};
-		translations.forEach(({ key, value }) => {
+		for (const { key, value } of translations) {
 			translationMap[key] = value;
-		});
+		}
 
 		// Function to recursively find and replace $t: markers
 		function translateValue(value) {
@@ -45,14 +66,16 @@ export default {
 			  return value.replace(/\{\$t:([^\s{}]+)\}/g, (match, key) => {
 				return translationMap[key] || match; // Replace if found, otherwise keep the original
 			  });
-			} else if (Array.isArray(value)) {
+			}
+			if (Array.isArray(value)) {
 			  // Process each element in the array
 			  return value.map((item) => translateValue(item));
-			} else if (typeof value === 'object' && value !== null) {
+			}
+			if (typeof value === 'object' && value !== null) {
 			  // Process each key in the object
 			  const translatedObject = {};
 			  for (const key in value) {
-				if (value.hasOwnProperty(key)) {
+				if (Object.prototype.hasOwnProperty.call(value, key)) {
 				  translatedObject[key] = translateValue(value[key]);
 				}
 			  }
@@ -60,8 +83,7 @@ export default {
 			}
 			// If it's another type (e.g., number, boolean), return as-is
 			return value;
-		  }
-		  
+		}
 
 		// Parse the input if it's a JSON string, otherwise use it directly
 		let parsedInput;
