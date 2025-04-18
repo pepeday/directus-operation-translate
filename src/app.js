@@ -33,7 +33,7 @@ export default {
 		  interface: 'select-dropdown',
 		  options: {
 			choices: [
-			  { text: 'Auto (User\'s Language)', value: 'auto' },
+			  { text: 'Default Language', value: 'default_language' },
 			  { text: 'English (en-US)', value: 'en-US' },
 			  { text: 'Greek (el-GR)', value: 'el-GR' },
 			  // Add other language options as needed

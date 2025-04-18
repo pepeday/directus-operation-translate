@@ -1,34 +1,11 @@
 export default {
 	id: 'operation-translator-node',
 	handler: async ({ input_to_translate, language }, { database, logger, accountability }) => {
-
-		let userLanguage = undefined;
-		if (language === 'auto' && accountability?.user) {
-			try {
-				// Retrieve user data from the database
-				const userData = await database
-					.select('language')
-					.from('directus_users')
-					.where('id', accountability.user)
-					.first();
-
-				if (userData?.language) {
-					userLanguage = userData.language;
-				} else {
-					throw new Error('User language not found in user data.');
-				}
-			} catch (error) {
-				// Log the error and fallback to the project's default language
-				logger.error(`Failed to retrieve user language: ${error.message}`);
-			}
-		} else {
-			// Use the language provided in the operation options
-			userLanguage = language;
-		}
+		let userLanguage;
 		
-		if (userLanguage === undefined) {
-			// Fetch the project's language if "auto" is selected
-			let projectLanguage; // Default language fallback
+		// If language is null/undefined or set to default_language, fetch project's default language
+		if (!language || language === 'default_language') {
+			// Fetch the project's default language
 			try {
 				const settings = await database
 					.select('default_language')
@@ -36,15 +13,17 @@ export default {
 					.first();
 
 				if (settings?.default_language) {
-					projectLanguage = settings.default_language;
+					userLanguage = settings.default_language;
 				} else {
 					throw new Error("Language not found in project settings.");
 				}
 			} catch (error) {
-				projectLanguage = 'en-US';
+				logger.error(`Failed to retrieve default language: ${error.message}`);
+				userLanguage = 'en-US'; // Fallback to en-US if settings can't be retrieved
 			}
-
-			userLanguage = projectLanguage;
+		} else {
+			// Use the language provided in the operation options
+			userLanguage = language;
 		}
 
 		// Fetch translations from the Directus database
